@@ -1,6 +1,9 @@
+
 <div align="center">
+
 # 🕸️ Neural Cradle
 ### Holographic String Interface — Interactive Web Art Installation
+
 </div>
 
 
