@@ -1,0 +1,948 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEURAL CRADLE — Holographic String Interface</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #000;
+    overflow: hidden;
+    font-family: 'Courier New', monospace;
+  }
+
+  #app-container {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* Hidden video element — only used for MediaPipe input */
+  #webcam {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+    width: 1px;
+    height: 1px;
+  }
+
+  /* p5.js canvas fills viewport */
+  #p5-canvas-container canvas {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+  }
+
+  /* CRT scanline overlay */
+  #scanlines {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 100;
+    background: repeating-linear-gradient(
+      to bottom,
+      transparent 0px,
+      transparent 3px,
+      rgba(0,0,0,0.08) 3px,
+      rgba(0,0,0,0.08) 4px
+    );
+    animation: scanRoll 12s linear infinite;
+  }
+
+  @keyframes scanRoll {
+    0%   { background-position: 0 0; }
+    100% { background-position: 0 400px; }
+  }
+
+  /* Vignette */
+  #vignette {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 99;
+    background: radial-gradient(ellipse at center,
+      transparent 50%,
+      rgba(0,0,10,0.7) 100%
+    );
+  }
+
+  /* HUD UI */
+  #hud {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    z-index: 200;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 18px 24px;
+    pointer-events: none;
+  }
+
+  .hud-panel {
+    backdrop-filter: blur(4px);
+    border: 1px solid rgba(0, 255, 240, 0.15);
+    background: rgba(0, 5, 20, 0.5);
+    padding: 8px 14px;
+    border-radius: 3px;
+  }
+
+  .hud-title {
+    color: #00f0ff;
+    font-size: 11px;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    text-shadow: 0 0 10px #00f0ff;
+  }
+
+  .hud-sub {
+    color: rgba(0, 240, 255, 0.4);
+    font-size: 9px;
+    letter-spacing: 2px;
+    margin-top: 3px;
+  }
+
+  .hud-status {
+    color: #ff00cc;
+    font-size: 9px;
+    letter-spacing: 2px;
+    text-align: right;
+    text-shadow: 0 0 8px #ff00cc;
+  }
+
+  .hud-status span {
+    display: block;
+    margin-top: 3px;
+    color: rgba(255, 220, 0, 0.7);
+    text-shadow: 0 0 6px rgba(255,220,0,0.5);
+  }
+
+  /* Permission / loading overlay */
+  #overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 500;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(ellipse at center, #000a1a 0%, #000 100%);
+    transition: opacity 0.8s ease;
+  }
+
+  #overlay.hidden {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .overlay-logo {
+    color: #00f0ff;
+    font-size: clamp(22px, 4vw, 38px);
+    letter-spacing: 8px;
+    text-transform: uppercase;
+    text-shadow: 0 0 30px #00f0ff, 0 0 60px rgba(0,240,255,0.4);
+    margin-bottom: 12px;
+  }
+
+  .overlay-sub {
+    color: rgba(0, 240, 255, 0.5);
+    font-size: 11px;
+    letter-spacing: 4px;
+    margin-bottom: 40px;
+  }
+
+  .loader-ring {
+    width: 60px;
+    height: 60px;
+    border: 2px solid transparent;
+    border-top-color: #00f0ff;
+    border-right-color: #ff00cc;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 24px;
+    filter: drop-shadow(0 0 8px #00f0ff);
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .overlay-msg {
+    color: rgba(255,255,255,0.5);
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-align: center;
+    line-height: 1.8;
+  }
+
+  .overlay-msg em {
+    color: #ff00cc;
+    font-style: normal;
+    text-shadow: 0 0 8px #ff00cc;
+  }
+
+  /* Corner decorations */
+  .corner {
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    z-index: 201;
+    pointer-events: none;
+  }
+  .corner.tl { top: 8px; left: 8px; border-top: 1px solid #00f0ff; border-left: 1px solid #00f0ff; }
+  .corner.tr { top: 8px; right: 8px; border-top: 1px solid #00f0ff; border-right: 1px solid #00f0ff; }
+  .corner.bl { bottom: 8px; left: 8px; border-bottom: 1px solid #00f0ff; border-left: 1px solid #00f0ff; }
+  .corner.br { bottom: 8px; right: 8px; border-bottom: 1px solid #00f0ff; border-right: 1px solid #00f0ff; }
+</style>
+</head>
+<body>
+
+<div id="app-container">
+  <video id="webcam" autoplay playsinline muted></video>
+  <div id="p5-canvas-container"></div>
+  <div id="scanlines"></div>
+  <div id="vignette"></div>
+
+  <div class="corner tl"></div>
+  <div class="corner tr"></div>
+  <div class="corner bl"></div>
+  <div class="corner br"></div>
+
+  <div id="hud">
+    <div class="hud-panel">
+      <div class="hud-title">NEURAL CRADLE</div>
+      <div class="hud-sub">HOLOGRAPHIC STRING INTERFACE v2.4</div>
+    </div>
+    <div class="hud-panel">
+      <div class="hud-status" id="hud-status">INITIALIZING...</div>
+      <div class="hud-status"><span id="hud-fps">-- FPS</span></div>
+    </div>
+  </div>
+
+  <div id="overlay">
+    <div class="overlay-logo">NEURAL CRADLE</div>
+    <div class="overlay-sub">HOLOGRAPHIC STRING INTERFACE</div>
+    <div class="loader-ring"></div>
+    <div class="overlay-msg">
+      INITIALIZING BIOMETRIC TRACKING SYSTEMS<br>
+      <em>WEBCAM ACCESS REQUIRED</em><br><br>
+      Place both hands in view to activate strings
+    </div>
+  </div>
+</div>
+
+<!-- CDN Imports -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.3/p5.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.min.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1675466862/camera_utils.min.js" crossorigin="anonymous"></script>
+
+<script>
+'use strict';
+
+// ============================================================
+//  CONSTANTS & CONFIGURATION
+// ============================================================
+const CFG = {
+  // MediaPipe
+  maxHands: 2,
+  minDetectionConfidence: 0.75,
+  minTrackingConfidence: 0.65,
+
+  // Landmark smoothing (0 = no smoothing, 1 = frozen)
+  lerpFactor: 0.38,
+
+  // Visual
+  bgAlpha: 30,           // trail fade alpha (lower = longer trails)
+  dotRadius: 6,
+  dotPulseAmp: 2.5,
+  dotGlowSize: 18,
+
+  // Strings
+  stringPairs: [         // index pairs [left tip, right tip]
+    [4,  4],             // thumb–thumb
+    [8,  8],             // index–index
+    [12, 12],            // middle–middle
+    [16, 16],            // ring–ring
+    [20, 20],            // pinky–pinky
+  ],
+  stringExtraLandmarks: [
+    [4, 8], [8, 12], [12, 16], [16, 20]  // cross-connections (same hand)
+  ],
+  touchThreshold: 38,    // pixel distance for "touch" event
+  maxStringThickness: 8,
+  minStringThickness: 0.8,
+  stringGlowMax: 40,
+  stringOscillationAmp: 4,
+  stringOscillationFreq: 0.003,
+
+  // Particles
+  maxParticles: 300,
+  burstCount: 28,
+  particleLife: 55,
+  particleSpeed: 4.5,
+
+  // FPS sampling
+  fpsSampleRate: 30,
+};
+
+// MediaPipe hand landmark indices
+const LM = {
+  WRIST: 0,
+  THUMB_CMC: 1, THUMB_MCP: 2, THUMB_IP: 3, THUMB_TIP: 4,
+  INDEX_MCP: 5, INDEX_PIP: 6, INDEX_DIP: 7, INDEX_TIP: 8,
+  MIDDLE_MCP: 9, MIDDLE_PIP: 10, MIDDLE_DIP: 11, MIDDLE_TIP: 12,
+  RING_MCP: 13, RING_PIP: 14, RING_DIP: 15, RING_TIP: 16,
+  PINKY_MCP: 17, PINKY_PIP: 18, PINKY_DIP: 19, PINKY_TIP: 20,
+};
+
+// Fingertip indices
+const FINGERTIPS = [4, 8, 12, 16, 20];
+
+// Neon color palette
+const COLORS = {
+  cyan:    [0,   240, 255],
+  magenta: [255, 0,   200],
+  yellow:  [255, 220, 0  ],
+  green:   [0,   255, 120],
+  purple:  [180, 0,   255],
+};
+
+const COLOR_ARRAY = Object.values(COLORS);
+
+// ============================================================
+//  UTILITY FUNCTIONS
+// ============================================================
+function lerp(a, b, t) { return a + (b - a) * t; }
+function dist2(ax, ay, bx, by) {
+  const dx = ax - bx, dy = ay - by;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
+function randRange(lo, hi) { return lo + Math.random() * (hi - lo); }
+
+function rgbStr(r, g, b, a = 1) {
+  return `rgba(${r|0},${g|0},${b|0},${a})`;
+}
+
+function lerpColor(c1, c2, t) {
+  return [
+    lerp(c1[0], c2[0], t),
+    lerp(c1[1], c2[1], t),
+    lerp(c1[2], c2[2], t),
+  ];
+}
+
+// ============================================================
+//  PARTICLE SYSTEM
+// ============================================================
+class Particle {
+  constructor(x, y, color) {
+    this.reset(x, y, color);
+  }
+
+  reset(x, y, color) {
+    this.x = x;
+    this.y = y;
+    this.color = color;
+    const angle = Math.random() * Math.PI * 2;
+    const speed = randRange(1, CFG.particleSpeed) * (Math.random() < 0.3 ? 2.2 : 1);
+    this.vx = Math.cos(angle) * speed;
+    this.vy = Math.sin(angle) * speed;
+    this.life = CFG.particleLife;
+    this.maxLife = CFG.particleLife;
+    this.radius = randRange(1.5, 5);
+    this.decay = randRange(0.88, 0.97);
+    this.active = true;
+  }
+
+  update() {
+    this.x += this.vx;
+    this.y += this.vy;
+    this.vx *= this.decay;
+    this.vy *= this.decay;
+    this.vy += 0.05; // subtle gravity
+    this.life--;
+    if (this.life <= 0) this.active = false;
+  }
+
+  draw(ctx) {
+    if (!this.active) return;
+    const t = this.life / this.maxLife;
+    const r = this.color[0], g = this.color[1], b = this.color[2];
+    const radius = this.radius * t;
+
+    ctx.save();
+    ctx.globalAlpha = t * t;
+    ctx.shadowBlur = 12 * t;
+    ctx.shadowColor = rgbStr(r, g, b, 1);
+    ctx.fillStyle = rgbStr(r, g, b, 1);
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+class ParticleSystem {
+  constructor() {
+    this.pool = [];
+    this.active = [];
+    // Pre-allocate pool
+    for (let i = 0; i < CFG.maxParticles; i++) {
+      this.pool.push(new Particle(0, 0, COLORS.cyan));
+    }
+  }
+
+  burst(x, y, color) {
+    const count = Math.min(CFG.burstCount, this.pool.length);
+    for (let i = 0; i < count; i++) {
+      const p = this.pool.pop();
+      if (!p) break;
+      p.reset(x, y, color);
+      this.active.push(p);
+    }
+  }
+
+  update() {
+    for (let i = this.active.length - 1; i >= 0; i--) {
+      this.active[i].update();
+      if (!this.active[i].active) {
+        this.pool.push(this.active[i]);
+        this.active.splice(i, 1);
+      }
+    }
+  }
+
+  draw(ctx) {
+    for (const p of this.active) p.draw(ctx);
+  }
+}
+
+// ============================================================
+//  SMOOTHED HAND LANDMARKS
+// ============================================================
+class SmoothedHand {
+  constructor() {
+    this.landmarks = null;   // smoothed positions [{x,y,z}]
+    this.raw = null;
+    this.velocity = [];      // per-landmark velocity magnitude
+    this.handedness = null;
+    this.active = false;
+    this.lostFrames = 0;
+  }
+
+  update(rawLandmarks, handedness, w, h) {
+    this.handedness = handedness;
+    this.lostFrames = 0;
+    this.active = true;
+
+    if (!this.landmarks) {
+      // First frame — initialize
+      this.landmarks = rawLandmarks.map(lm => ({
+        x: (1 - lm.x) * w,   // mirror x
+        y: lm.y * h,
+        z: lm.z,
+      }));
+      this.velocity = new Array(rawLandmarks.length).fill(0);
+    } else {
+      // Smooth
+      for (let i = 0; i < rawLandmarks.length; i++) {
+        const tx = (1 - rawLandmarks[i].x) * w;
+        const ty = rawLandmarks[i].y * h;
+        const px = this.landmarks[i].x;
+        const py = this.landmarks[i].y;
+        this.velocity[i] = dist2(tx, ty, px, py);
+        this.landmarks[i].x = lerp(px, tx, CFG.lerpFactor);
+        this.landmarks[i].y = lerp(py, ty, CFG.lerpFactor);
+        this.landmarks[i].z = lerp(this.landmarks[i].z, rawLandmarks[i].z, CFG.lerpFactor);
+      }
+    }
+  }
+
+  markLost() {
+    this.lostFrames++;
+    if (this.lostFrames > 8) {
+      this.active = false;
+      this.landmarks = null;
+    }
+  }
+
+  getLandmark(i) {
+    if (!this.landmarks) return null;
+    return this.landmarks[i];
+  }
+
+  getVelocity(i) {
+    return this.velocity[i] || 0;
+  }
+}
+
+// ============================================================
+//  MAIN P5 SKETCH
+// ============================================================
+const sketch = (p) => {
+
+  // --- State ---
+  let videoEl;
+  let mpHands;
+  let mpCamera;
+
+  let hands = [new SmoothedHand(), new SmoothedHand()]; // [left, right] — assigned dynamically
+  let leftHand  = null;
+  let rightHand = null;
+
+  let particles;
+  let touchCooldown = {}; // key = "tipL-tipR", value = cooldown frames
+
+  let offscreenGraphics; // for bloom glow layer
+  let frameCount_ = 0;
+  let fpsBuffer = [];
+  let lastFpsTime = performance.now();
+  let displayFps = 0;
+
+  // Oscillation phases per string
+  let stringPhases = CFG.stringPairs.map(() => Math.random() * Math.PI * 2);
+
+  // ---- Setup ----
+  p.setup = () => {
+    const cnv = p.createCanvas(window.innerWidth, window.innerHeight);
+    cnv.parent('p5-canvas-container');
+    p.pixelDensity(Math.min(window.devicePixelRatio || 1, 1.5));
+    p.colorMode(p.RGB, 255);
+    p.textFont('Courier New');
+
+    particles = new ParticleSystem();
+
+    offscreenGraphics = p.createGraphics(p.width, p.height);
+    offscreenGraphics.pixelDensity(1);
+
+    videoEl = document.getElementById('webcam');
+    initMediaPipe();
+    window.addEventListener('resize', onResize);
+  };
+
+  function onResize() {
+    p.resizeCanvas(window.innerWidth, window.innerHeight);
+    offscreenGraphics.resizeCanvas(p.width, p.height);
+  }
+
+  // ---- MediaPipe Initialization ----
+  function initMediaPipe() {
+    mpHands = new Hands({
+      locateFile: (file) =>
+        `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${file}`
+    });
+
+    mpHands.setOptions({
+      maxNumHands: CFG.maxHands,
+      modelComplexity: 1,
+      minDetectionConfidence: CFG.minDetectionConfidence,
+      minTrackingConfidence: CFG.minTrackingConfidence,
+    });
+
+    mpHands.onResults(onHandResults);
+
+    navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720, facingMode: 'user' } })
+      .then(stream => {
+        videoEl.srcObject = stream;
+        videoEl.play();
+
+        mpCamera = new Camera(videoEl, {
+          onFrame: async () => {
+            await mpHands.send({ image: videoEl });
+          },
+          width: 1280,
+          height: 720,
+        });
+        mpCamera.start();
+
+        // Dismiss loading overlay after camera starts
+        setTimeout(() => {
+          document.getElementById('overlay').classList.add('hidden');
+        }, 1200);
+
+        document.getElementById('hud-status').textContent = 'TRACKING ACTIVE';
+      })
+      .catch(err => {
+        console.error('Webcam error:', err);
+        document.querySelector('.overlay-msg').innerHTML =
+          '<em>WEBCAM ACCESS DENIED</em><br>Please allow camera permissions and refresh.';
+      });
+  }
+
+  // ---- MediaPipe Results Callback ----
+  function onHandResults(results) {
+    const w = p.width, h = p.height;
+
+    leftHand  = null;
+    rightHand = null;
+
+    if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) {
+      hands[0].markLost();
+      hands[1].markLost();
+      return;
+    }
+
+    // Assign hands by handedness label
+    for (let i = 0; i < results.multiHandLandmarks.length; i++) {
+      const lms = results.multiHandLandmarks[i];
+      const label = results.multiHandedness[i]?.label || 'Right';
+      const slotIdx = i < 2 ? i : 1;
+      hands[slotIdx].update(lms, label, w, h);
+
+      // MediaPipe's "Right" from webcam = user's left (mirrored)
+      if (label === 'Left')       rightHand = hands[slotIdx];
+      else if (label === 'Right') leftHand  = hands[slotIdx];
+    }
+
+    // Mark unused slots as lost
+    if (results.multiHandLandmarks.length < 2) {
+      const usedSlot = results.multiHandLandmarks.length - 1;
+      if (usedSlot < 1) hands[1].markLost();
+    }
+  }
+
+  // ---- Draw Loop ----
+  p.draw = () => {
+    frameCount_++;
+    updateFps();
+
+    const pg = p.drawingContext; // raw canvas 2D context
+
+    // --- Background fade (trail effect) ---
+    pg.globalCompositeOperation = 'source-over';
+    pg.fillStyle = `rgba(0, 2, 12, ${CFG.bgAlpha / 255})`;
+    pg.fillRect(0, 0, p.width, p.height);
+
+    // --- Draw webcam silhouette (very faint) ---
+    drawWebcamSilhouette(pg);
+
+    // --- Draw strings ---
+    if (leftHand?.active && rightHand?.active) {
+      drawAllStrings(pg);
+    }
+
+    // --- Draw hand landmarks ---
+    if (leftHand?.active)  drawHandDots(pg, leftHand,  COLORS.cyan);
+    if (rightHand?.active) drawHandDots(pg, rightHand, COLORS.magenta);
+
+    // --- Check touch events ---
+    if (leftHand?.active && rightHand?.active) {
+      checkTouches();
+    }
+
+    // --- Particles ---
+    particles.update();
+    particles.draw(pg);
+
+    // --- HUD overlay elements ---
+    drawHUDElements(pg);
+
+    // Tick oscillation phases
+    for (let i = 0; i < stringPhases.length; i++) {
+      stringPhases[i] += CFG.stringOscillationFreq * 60;
+    }
+
+    // Tick cooldowns
+    for (const key in touchCooldown) {
+      touchCooldown[key]--;
+      if (touchCooldown[key] <= 0) delete touchCooldown[key];
+    }
+  };
+
+  // ---- Webcam silhouette ----
+  function drawWebcamSilhouette(ctx) {
+    if (!videoEl || videoEl.readyState < 2) return;
+    ctx.save();
+    ctx.globalAlpha = 0.045;
+    ctx.globalCompositeOperation = 'screen';
+    // Mirror the video
+    ctx.translate(p.width, 0);
+    ctx.scale(-1, 1);
+    try {
+      ctx.drawImage(videoEl, 0, 0, p.width, p.height);
+    } catch(e) {}
+    ctx.restore();
+  }
+
+  // ---- Hand landmark dots ----
+  function drawHandDots(ctx, hand, color) {
+    if (!hand.landmarks) return;
+    const t = frameCount_ * 0.05;
+    const [r, g, b] = color;
+
+    for (let i = 0; i < hand.landmarks.length; i++) {
+      const lm = hand.landmarks[i];
+      const vel = clamp(hand.getVelocity(i) / 20, 0, 1);
+      const isTip = FINGERTIPS.includes(i);
+
+      // Pulse size
+      const pulseR = (isTip ? CFG.dotRadius + 2 : CFG.dotRadius - 1)
+        + Math.sin(t + i * 0.7) * CFG.dotPulseAmp * (isTip ? 1.4 : 0.7)
+        + vel * 3;
+
+      // Glow
+      ctx.save();
+      ctx.shadowBlur = CFG.dotGlowSize * (isTip ? 1.6 : 0.9) + vel * 15;
+      ctx.shadowColor = rgbStr(r, g, b, 1);
+      ctx.globalCompositeOperation = 'screen';
+
+      // Outer glow ring for fingertips
+      if (isTip) {
+        ctx.globalAlpha = 0.25 + vel * 0.4;
+        ctx.fillStyle = rgbStr(r, g, b, 1);
+        ctx.beginPath();
+        ctx.arc(lm.x, lm.y, pulseR * 2.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Core dot
+      ctx.globalAlpha = 0.75 + vel * 0.25;
+      ctx.fillStyle = rgbStr(r, g, b, 1);
+      ctx.beginPath();
+      ctx.arc(lm.x, lm.y, pulseR, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Bright core center
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = 'white';
+      ctx.beginPath();
+      ctx.arc(lm.x, lm.y, pulseR * 0.35, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
+    }
+
+    // Draw skeleton lines (hand connections)
+    drawHandSkeleton(ctx, hand, color);
+  }
+
+  // Hand skeleton connection map
+  const CONNECTIONS = [
+    [0,1],[1,2],[2,3],[3,4],
+    [0,5],[5,6],[6,7],[7,8],
+    [0,9],[9,10],[10,11],[11,12],
+    [0,13],[13,14],[14,15],[15,16],
+    [0,17],[17,18],[18,19],[19,20],
+    [5,9],[9,13],[13,17],
+  ];
+
+  function drawHandSkeleton(ctx, hand, color) {
+    if (!hand.landmarks) return;
+    const [r, g, b] = color;
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    ctx.globalAlpha = 0.2;
+    ctx.strokeStyle = rgbStr(r, g, b, 1);
+    ctx.lineWidth = 1;
+    ctx.shadowBlur = 6;
+    ctx.shadowColor = rgbStr(r, g, b, 1);
+
+    for (const [a, b_] of CONNECTIONS) {
+      const la = hand.landmarks[a];
+      const lb = hand.landmarks[b_];
+      if (!la || !lb) continue;
+      ctx.beginPath();
+      ctx.moveTo(la.x, la.y);
+      ctx.lineTo(lb.x, lb.y);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // ---- String rendering ----
+  function drawAllStrings(ctx) {
+    // Primary fingertip-to-fingertip strings
+    for (let s = 0; s < CFG.stringPairs.length; s++) {
+      const [li, ri] = CFG.stringPairs[s];
+      const lm = leftHand.getLandmark(li);
+      const rm = rightHand.getLandmark(ri);
+      if (!lm || !rm) continue;
+
+      // Color selection (cycle through palette)
+      const colorA = COLOR_ARRAY[s % COLOR_ARRAY.length];
+      const colorB = COLOR_ARRAY[(s + 2) % COLOR_ARRAY.length];
+
+      const velA = clamp(leftHand.getVelocity(li)  / 25, 0, 1);
+      const velB = clamp(rightHand.getVelocity(ri) / 25, 0, 1);
+      const avgVel = (velA + velB) * 0.5;
+
+      drawString(ctx, lm, rm, colorA, colorB, avgVel, stringPhases[s], s);
+    }
+
+    // Cross-wrist structural strings (very faint)
+    drawCrossStrings(ctx);
+  }
+
+  function drawString(ctx, pA, pB, colorA, colorB, vel, phase, idx) {
+    const dx = pB.x - pA.x;
+    const dy = pB.y - pA.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < 1) return;
+
+    // Thickness based on proximity (closer = thicker, tension style)
+    const normDist = clamp(dist / (p.width * 0.5), 0, 1);
+    const thickness = lerp(CFG.maxStringThickness, CFG.minStringThickness, normDist) + vel * 3;
+    const glowSize = lerp(CFG.stringGlowMax, 4, normDist) + vel * 20;
+
+    // Number of oscillation segments
+    const segments = 28;
+    const perp = { x: -dy / dist, y: dx / dist }; // perpendicular unit vector
+
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+
+    // Draw multiple glow layers
+    const layers = [
+      { blur: glowSize * 1.8, alpha: 0.18, widthMul: 2.8 },
+      { blur: glowSize * 0.8, alpha: 0.40, widthMul: 1.5 },
+      { blur: glowSize * 0.3, alpha: 0.85, widthMul: 1.0 },
+      { blur: 2,              alpha: 1.00, widthMul: 0.35 }, // bright core
+    ];
+
+    for (const layer of layers) {
+      // Gradient along string
+      const grd = ctx.createLinearGradient(pA.x, pA.y, pB.x, pB.y);
+      grd.addColorStop(0,   rgbStr(...colorA, layer.alpha));
+      grd.addColorStop(0.5, rgbStr(...lerpColor(colorA, colorB, 0.5), layer.alpha));
+      grd.addColorStop(1,   rgbStr(...colorB, layer.alpha));
+
+      ctx.shadowBlur = layer.blur;
+      ctx.shadowColor = rgbStr(...colorA, 0.6);
+      ctx.strokeStyle = grd;
+      ctx.lineWidth = thickness * layer.widthMul;
+      ctx.lineCap = 'round';
+
+      ctx.beginPath();
+      for (let i = 0; i <= segments; i++) {
+        const t = i / segments;
+        const baseX = lerp(pA.x, pB.x, t);
+        const baseY = lerp(pA.y, pB.y, t);
+
+        // Oscillation — standing wave feel
+        const osc = Math.sin(t * Math.PI * 2.5 + phase) * CFG.stringOscillationAmp
+          * Math.sin(t * Math.PI) // envelope: zero at tips
+          * (1 + vel * 3);
+
+        const px = baseX + perp.x * osc;
+        const py = baseY + perp.y * osc;
+
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+
+  function drawCrossStrings(ctx) {
+    // Faint connecting lines from left wrist to right wrist
+    const lw = leftHand.getLandmark(LM.WRIST);
+    const rw = rightHand.getLandmark(LM.WRIST);
+    if (!lw || !rw) return;
+
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    ctx.globalAlpha = 0.06;
+    ctx.strokeStyle = rgbStr(0, 240, 255, 1);
+    ctx.lineWidth = 1;
+    ctx.shadowBlur = 8;
+    ctx.shadowColor = 'rgba(0,240,255,0.5)';
+    ctx.setLineDash([4, 8]);
+    ctx.beginPath();
+    ctx.moveTo(lw.x, lw.y);
+    ctx.lineTo(rw.x, rw.y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+
+  // ---- Touch detection ----
+  function checkTouches() {
+    for (let li = 0; li < FINGERTIPS.length; li++) {
+      for (let ri = 0; ri < FINGERTIPS.length; ri++) {
+        const lIdx = FINGERTIPS[li];
+        const rIdx = FINGERTIPS[ri];
+        const key = `${lIdx}-${rIdx}`;
+
+        if (touchCooldown[key]) continue;
+
+        const lm = leftHand.getLandmark(lIdx);
+        const rm = rightHand.getLandmark(rIdx);
+        if (!lm || !rm) continue;
+
+        const d = dist2(lm.x, lm.y, rm.x, rm.y);
+        if (d < CFG.touchThreshold) {
+          // Midpoint burst
+          const mx = (lm.x + rm.x) * 0.5;
+          const my = (lm.y + rm.y) * 0.5;
+          const color = COLOR_ARRAY[(li + ri) % COLOR_ARRAY.length];
+          particles.burst(mx, my, color);
+          // Also burst smaller at each fingertip
+          particles.burst(lm.x, lm.y, COLORS.cyan);
+          particles.burst(rm.x, rm.y, COLORS.magenta);
+
+          touchCooldown[key] = 22; // cooldown frames
+        }
+      }
+    }
+  }
+
+  // ---- HUD elements drawn on canvas ----
+  function drawHUDElements(ctx) {
+    // Active hand indicators
+    ctx.save();
+    ctx.font = '9px Courier New';
+    ctx.letterSpacing = '2px';
+    ctx.globalAlpha = 0.65;
+
+    if (leftHand?.active) {
+      ctx.fillStyle = '#00f0ff';
+      ctx.shadowBlur = 6;
+      ctx.shadowColor = '#00f0ff';
+      ctx.fillText('LEFT HAND ACTIVE', 24, p.height - 32);
+    }
+    if (rightHand?.active) {
+      ctx.fillStyle = '#ff00cc';
+      ctx.shadowBlur = 6;
+      ctx.shadowColor = '#ff00cc';
+      ctx.textAlign = 'right';
+      ctx.fillText('RIGHT HAND ACTIVE', p.width - 24, p.height - 32);
+      ctx.textAlign = 'left';
+    }
+    ctx.restore();
+
+    // Particle count (debug-style)
+    ctx.save();
+    ctx.fillStyle = 'rgba(255,220,0,0.3)';
+    ctx.font = '8px Courier New';
+    ctx.fillText(`◈ ${particles.active.length} NODES`, 24, p.height - 18);
+    ctx.restore();
+  }
+
+  // ---- FPS counter ----
+  function updateFps() {
+    fpsBuffer.push(performance.now());
+    if (fpsBuffer.length > CFG.fpsSampleRate) fpsBuffer.shift();
+    if (fpsBuffer.length > 1) {
+      const elapsed = fpsBuffer[fpsBuffer.length - 1] - fpsBuffer[0];
+      displayFps = Math.round((fpsBuffer.length - 1) / (elapsed / 1000));
+    }
+    if (frameCount_ % 10 === 0) {
+      document.getElementById('hud-fps').textContent = `${displayFps} FPS`;
+    }
+  }
+
+  p.windowResized = () => {
+    p.resizeCanvas(window.innerWidth, window.innerHeight);
+  };
+};
+
+// ============================================================
+//  LAUNCH
+// ============================================================
+new p5(sketch);
+</script>
+</body>
+</html>
