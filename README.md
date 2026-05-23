@@ -32,9 +32,18 @@
 
 ## ✦ Live Demo
 
-🔗 **[Play Neural Cradle Now](https://mohd-ali10.github.io/neural-cradle/)**
+<div align="center">
 
-> **Note:** Works best on desktop Chrome or Edge. Mobile devices are supported via HTTPS.
+> **SYSTEM STATUS:** ONLINE  
+> **INTERFACE:** HOLOGRAPHIC STRING MATRIX
+
+[![LAUNCH INTERFACE](https://img.shields.io/badge/LAUNCH_NEURAL_CRADLE-00f0ff?style=for-the-badge&logo=googlechrome&logoColor=black)](https://mohd-ali10.github.io/neural-cradle/)
+
+<br/>
+
+<sub>*Best experienced on Desktop Chrome/Edge. Ensure camera permissions are granted.*</sub>
+
+</div>
 
 ---
 
