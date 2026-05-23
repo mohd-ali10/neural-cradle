@@ -1,10 +1,3 @@
-Here is a rewritten, visually enhanced `README.md` tailored for your **Neural Cradle** project. It leverages your full-stack and AI background to highlight the technical sophistication of the project while maintaining a sleek, cyberpunk aesthetic that matches the application.
-
-I have updated the links to point to your specific GitHub repository and live demo.
-
-***
-
-```markdown
 # 🕸️ Neural Cradle
 ### Holographic String Interface — Interactive Web Art Installation
 
