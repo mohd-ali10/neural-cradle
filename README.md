@@ -4,7 +4,8 @@
 # 🕸️ Neural Cradle
 ### Holographic String Interface — Interactive Web Art Installation
 
-[![Live Demo](https://img.shields.io/badge/Live_Demo-Launch_App-cyan?style=for-the-badge&logo=googlechrome)](https://mohd-ali10.github.io/neural-cradle/)
+[![Live Demo](https://img.shields.io/badge/Live_Demo-Launch_App-cyan?style=for-the-badge&logo=googlechrome)](https://neural-cradle.vercel.app
+/)
 [![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](LICENSE)
 [![Tech Stack](https://img.shields.io/badge/Built_With-MediaPipe%20%7C%20p5.js%20%7C%20Vanilla_JS-blue?style=for-the-badge)](https://github.com/mohd-ali10/neural-cradle)
 
